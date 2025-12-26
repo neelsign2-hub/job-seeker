@@ -6,3 +6,6 @@ The Job-Matching Platform is a web-based application designed to connect job see
 
 # Group Members
 Parajiya meer = 240023116039
+Nandini shah  = 240023116055
+RangAN som    = 240023116061
+Dipali ptel   = 240023116042
