@@ -6,11 +6,22 @@ const {
   getJobApplications,
   getUserApplications,
   updateApplicationStatus,
+  getRecruiterApplications,
 } = require("../controllers/applicationController.js");
 
 const applicationRouter = express.Router();
 
 // Application routes
+
+// Get all applications for recruiter (must be before /:jobId routes)
+applicationRouter.get(
+  "/recruiter/all",
+  isAuthenticated,
+  isAuthorized("Recruiter"),
+  getRecruiterApplications
+);
+
+// Apply for a job (Job Seeker)
 applicationRouter.post(
   "/:jobId/apply",
   isAuthenticated,

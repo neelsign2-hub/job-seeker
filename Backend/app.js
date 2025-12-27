@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const path = require('path');
 const { connection } = require('./DB_connect.js');
 const { errorHandler } = require('./middlewares/errorHandler.js');
 const userRouter = require('./routes/userRoutes.js');
@@ -25,6 +26,9 @@ app.use(cors({
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.json());
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/v1/user', userRouter);
 

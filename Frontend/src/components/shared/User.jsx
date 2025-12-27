@@ -44,12 +44,20 @@ const User = (props) => {
                   <span className="absolute left-0 bottom-0 w-0 h-0.5 bg-blue-600 transition-all duration-200 group-hover:w-full"></span>
                 </li>
               ) : (
-                <li className="relative group pb-1">
-                  <Link to="/companylist">
-                    <span>MyCompany</span>
-                  </Link>
-                  <span className="absolute left-0 bottom-0 w-0 h-0.5 bg-blue-600 transition-all duration-200 group-hover:w-full"></span>
-                </li>
+                <>
+                  <li className="relative group pb-1">
+                    <Link to="/companylist">
+                      <span>MyCompany</span>
+                    </Link>
+                    <span className="absolute left-0 bottom-0 w-0 h-0.5 bg-blue-600 transition-all duration-200 group-hover:w-full"></span>
+                  </li>
+                  <li className="relative group pb-1">
+                    <Link to="/recruiter-applications">
+                      <span>All Applications</span>
+                    </Link>
+                    <span className="absolute left-0 bottom-0 w-0 h-0.5 bg-blue-600 transition-all duration-200 group-hover:w-full"></span>
+                  </li>
+                </>
               )}
             </ul>
 

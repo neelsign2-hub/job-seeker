@@ -97,12 +97,18 @@ const applyForJob = catchAsync(async (req, res, next) => {
 
   await application.save();
 
-  await sendApplicationConfirmationEmail(
-    req?.user?.email,
-    req?.user?.username,
-    job?.title,
-    job?.company?.name
-  );
+  // Try to send confirmation email, but don't fail if email is not configured
+  try {
+    await sendApplicationConfirmationEmail(
+      req?.user?.email,
+      req?.user?.username,
+      job?.title,
+      job?.company?.name
+    );
+  } catch (emailError) {
+    console.log('Failed to send confirmation email:', emailError.message);
+    // Continue anyway - email is not critical
+  }
 
   res.status(201).json({
     status: "success",
@@ -184,10 +190,74 @@ const getApplicationById = catchAsync(async (req, res, next) => {
   });
 });
 
+// Get all applications for recruiter's company jobs
+const getRecruiterApplications = catchAsync(async (req, res, next) => {
+  const recruiterId = req.user._id;
+  const { status, jobId } = req.query;
+
+  // Find all jobs created by this recruiter
+  const recruiterJobs = await Job.find({ created_by: recruiterId }).select("_id");
+  const jobIds = recruiterJobs.map((job) => job._id);
+
+  if (jobIds.length === 0) {
+    return res.status(200).json({
+      status: "success",
+      results: 0,
+      applications: [],
+      message: "No jobs posted yet",
+    });
+  }
+
+  // Build filter query
+  const filter = { job: { $in: jobIds } };
+  
+  // Optional: Filter by status (applied, rejected, accepted)
+  if (status && ["applied", "rejected", "accepted"].includes(status)) {
+    filter.status = status;
+  }
+
+  // Optional: Filter by specific job
+  if (jobId) {
+    filter.job = jobId;
+  }
+
+  // Get all applications for these jobs
+  const applications = await Application.find(filter)
+    .populate({
+      path: "applicant",
+      select: "username email phone profilePhoto skills city resume",
+    })
+    .populate({
+      path: "job",
+      select: "title location salary timing company",
+      populate: {
+        path: "company",
+        select: "name logo",
+      },
+    })
+    .sort({ appliedDate: -1 }); // Most recent first
+
+  // Get statistics
+  const stats = {
+    total: applications.length,
+    applied: applications.filter((app) => app.status === "applied").length,
+    accepted: applications.filter((app) => app.status === "accepted").length,
+    rejected: applications.filter((app) => app.status === "rejected").length,
+  };
+
+  res.status(200).json({
+    status: "success",
+    results: applications.length,
+    stats,
+    applications,
+  });
+});
+
 module.exports = {
   applyForJob,
   getJobApplications,
   getUserApplications,
   updateApplicationStatus,
   getApplicationById,
+  getRecruiterApplications,
 };

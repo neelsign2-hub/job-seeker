@@ -3,16 +3,35 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
+// Check if email is configured
+const isEmailConfigured = () => {
+    return process.env.EMAIL_HOST && 
+           process.env.EMAIL_PORT && 
+           process.env.EMAIL_USER && 
+           process.env.EMAIL_PASS;
+};
+
+// Only create transporter if email is configured
+let transporter = null;
+if (isEmailConfigured()) {
+    transporter = nodemailer.createTransport({
+        host: process.env.EMAIL_HOST,
+        port: process.env.EMAIL_PORT,
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        },
+    });
+} else {
+    console.warn('⚠️  Email credentials not configured. Email functionality will be disabled.');
+}
 
 exports.sendVerificationEmail = (email, token) => {
+    if (!transporter) {
+        console.log('Email not configured. Skipping verification email.');
+        return Promise.resolve({ skipped: true });
+    }
+    
     const verificationUrl = `https://careerxpert.onrender.com/api/v1/user/verify-email?token=${token}`;
     // https://careerxpert.onrender.com
     
@@ -26,6 +45,11 @@ exports.sendVerificationEmail = (email, token) => {
 };
 
 exports.sendEmail = async (options) => {
+    if (!transporter) {
+        console.log('Email not configured. Skipping email to:', options.email);
+        return { skipped: true };
+    }
+    
     // might need to change the email template later
     
     // setting up mail content 
@@ -33,8 +57,8 @@ exports.sendEmail = async (options) => {
         from: `CareerXpert ${process.env.EMAIL_USER}`, // Replace with your email or service email
         to: options.email,
         subject: options.subject,
-        text: options.message, 
-        // html: options.html, 
+        text: options.message,
+        html: options.html, 
     };
 
     // send mail with defined transport object

@@ -58,16 +58,22 @@ const ProfileUser = ({ user, loading }) => {
       city: user?.city || "",
       address: user?.address || "",
       aboutMe: user?.aboutMe || "",
-      skills: checkForValidSkills(user?.skills) || [],
-      socialLinks: (user?.socialLinks && JSON.parse(user?.socialLinks)) || {},
+     skills: checkForValidSkills(user?.skills) || [],
+      socialLinks:
+        typeof user?.socialLinks === "string"
+          ? JSON.parse(user?.socialLinks)
+          : user?.socialLinks || {},
       jobPreference:
-        (user?.jobPreference && JSON.parse(user?.jobPreference)) || {},
+        typeof user?.jobPreference === "string"
+          ? JSON.parse(user?.jobPreference)
+          : user?.jobPreference || {},
       resume: user?.resume || {},
       profilePhoto: user?.profilePhoto ?? {
         url: "https://via.placeholder.com/150",
       },
     });
   }, [user]);
+
 
   const handleResumeUpload = async (e) => {
     e.preventDefault();

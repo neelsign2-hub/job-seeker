@@ -5,10 +5,10 @@ const { sendVerificationEmail, sendEmail } = require("../utils/sendEmail.js");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-// const { v2: cloudinary } = require('cloudinary');
-const cloudinary = require("../utils/cloudinary.js");
 const { Job } = require("../models/jobModel.js");
 const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
 
 // cloudinary.config({
@@ -207,17 +207,22 @@ const forgotPassword = catchAsync(async (req, res, next) => {
   user.passwordResetExpires = Date.now() + 10 * 60 * 1000; // Token expires in 10 minutes
   await user.save({ validateBeforeSave: false });
 
-  // Send token via email
+  // Send token via email - but don't fail if email is not configured
   const resetURL = `https://careerxpert.vercel.app/reset-password/${resetToken}`;
-  await sendEmail({
-    email: user.email,
-    subject: "Password Reset Request",
-    message: `Forgot your password? Submit a new password and confirm password to: ${resetURL}`,
-  });
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: "Password Reset Request",
+      message: `Forgot your password? Submit a new password and confirm password to: ${resetURL}`,
+    });
+  } catch (emailError) {
+    console.log('Failed to send reset email:', emailError.message);
+    // Continue anyway - user can still use the token if they have it
+  }
 
   res.status(200).json({
     status: "success",
-    message: "Token sent to email!",
+    message: "Password reset token generated. Check your email if configured.",
     resetToken,
   });
 });
@@ -358,31 +363,64 @@ const getMe = catchAsync(async (req, res, next) => {
 //   });
 // });
 
-// Multer configuration for temporary file storage
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, "..", "uploads");
+const profilePhotosDir = path.join(uploadsDir, "profile-photos");
+const resumesDir = path.join(uploadsDir, "resumes");
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+if (!fs.existsSync(profilePhotosDir)) {
+  fs.mkdirSync(profilePhotosDir, { recursive: true });
+}
+if (!fs.existsSync(resumesDir)) {
+  fs.mkdirSync(resumesDir, { recursive: true });
+}
+
+// Multer configuration for local file storage
 const storage = multer.diskStorage({
-  destination: "temp/",
+  destination: (req, file, cb) => {
+    if (file.fieldname === "profilePhoto") {
+      cb(null, profilePhotosDir);
+    } else if (file.fieldname === "resume") {
+      cb(null, resumesDir);
+    } else {
+      cb(null, uploadsDir);
+    }
+  },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
   },
 });
 
 // File filter to accept only specific file types
 const fileFilter = (req, file, cb) => {
-  if (
-    file.mimetype === "image/jpeg" ||
-    file.mimetype === "image/png" ||
-    file.mimetype === "application/pdf"
-  ) {
-    cb(null, true);
+  if (file.fieldname === "profilePhoto") {
+    if (file.mimetype === "image/jpeg" || file.mimetype === "image/png" || file.mimetype === "image/jpg") {
+      cb(null, true);
+    } else {
+      cb(new AppError("Only JPEG, JPG and PNG images are allowed for profile photo!", 400), false);
+    }
+  } else if (file.fieldname === "resume") {
+    if (file.mimetype === "application/pdf") {
+      cb(null, true);
+    } else {
+      cb(new AppError("Only PDF files are allowed for resume!", 400), false);
+    }
   } else {
     cb(new AppError("Unsupported file format!", 400), false);
   }
 };
 
-// Multer instance
+// Multer instance with file size limits
 const upload = multer({
   storage,
   fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
 });
 
 const updateProfile = [
@@ -450,13 +488,13 @@ const updateProfile = [
 
     const socialLinks = JSON.parse(updateData.socialLinks);
     console.log(socialLinks)
-    if (socialLinks.twitter) {
-      const twitterRegex = /^https:\/\/(www\.)?x\.com\//;
-      if (!twitterRegex.test(socialLinks.twitter)) {
-        console.log('error in twitter url')
-        return next(new AppError("Invalid Twitter URL format", 400));
-      }
-    }
+    // if (socialLinks.twitter) {
+    //   const twitterRegex = /^https:\/\/(www\.)?x\.com\//;
+    //   if (!twitterRegex.test(socialLinks.twitter)) {
+    //     console.log('error in twitter url')
+    //     return next(new AppError("Invalid Twitter URL format", 400));
+    //   }
+    // }
     
     if (socialLinks.github) {
       const githubRegex = /^https:\/\/(www\.)?github\.com\//;
@@ -487,43 +525,42 @@ const updateProfile = [
     try {
       // Handle profile photo upload
       if (req.files?.profilePhoto) {
-        const profilePhoto = await cloudinary.uploader.upload(
-          req.files.profilePhoto[0].path,
-          {
-            folder: "profile-photos",
-            width: 150,
-            height: 150,
-            crop: "fill",
+        const file = req.files.profilePhoto[0];
+        
+        // Delete old profile photo if exists
+        if (req.user.profilePhoto && req.user.profilePhoto.id) {
+          const oldPhotoPath = path.join(__dirname, "..", req.user.profilePhoto.id);
+          if (fs.existsSync(oldPhotoPath)) {
+            fs.unlinkSync(oldPhotoPath);
           }
-        );
-
-        if (profilePhoto?.secure_url) {
-          updateData.profilePhoto = {
-            id: profilePhoto.public_id,
-            url: profilePhoto.secure_url,
-          };
-        } else {
-          throw new AppError("Error uploading profile photo", 400);
         }
+
+        // Store relative path for database
+        const relativePath = path.join("uploads", "profile-photos", file.filename);
+        updateData.profilePhoto = {
+          id: relativePath, // Store relative path as id
+          url: `${req.protocol}://${req.get("host")}/${relativePath.replace(/\\/g, "/")}`, // Full URL
+        };
       }
 
       // Handle resume upload
       if (req?.files?.resume) {
-        const resume = await cloudinary.uploader.upload(
-          req.files.resume[0].path,
-          {
-            folder: "resumes",
-            resource_type: "raw",
+        const file = req.files.resume[0];
+        
+        // Delete old resume if exists
+        if (req.user.resume && req.user.resume.id) {
+          const oldResumePath = path.join(__dirname, "..", req.user.resume.id);
+          if (fs.existsSync(oldResumePath)) {
+            fs.unlinkSync(oldResumePath);
           }
-        );
-        if (resume?.secure_url) {
-          updateData.resume = {
-            id: resume.public_id,
-            url: resume.secure_url,
-          };
-        } else {
-          throw new AppError("Error uploading resume", 400);
         }
+
+        // Store relative path for database
+        const relativePath = path.join("uploads", "resumes", file.filename);
+        updateData.resume = {
+          id: relativePath, // Store relative path as id
+          url: `${req.protocol}://${req.get("host")}/${relativePath.replace(/\\/g, "/")}`, // Full URL
+        };
       }
     } catch (error) {
       return next(new AppError(error.message || "File upload failed", 500));

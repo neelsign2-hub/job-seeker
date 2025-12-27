@@ -23,6 +23,7 @@ import Home_jobs from "./components/shared/Home_jobs";
 import Home_companies from "./components/shared/Home_companies";
 import CompanyD from "./components/shared/CompanyD";
 import ApplyJobDcard from "./components/shared/ApplyJobDcard";
+import RecruiterApplications from "./components/shared/RecruiterApplications";
 import { BASE_URL, getToken } from "./lib/api";
 
 function App() {
@@ -153,6 +154,10 @@ function App() {
     {
       path: "/applyjobdcard",
       element: <ApplyJobDcard user={currUser} />,
+    },
+    {
+      path: "/recruiter-applications",
+      element: <RecruiterApplications user={currUser} />,
     },
   ]);
 
